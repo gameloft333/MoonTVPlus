@@ -9,6 +9,7 @@ import {
   Search,
   Sparkles,
   Tv,
+  User,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -25,6 +26,7 @@ const navItems = [
   { label: '综艺', href: '/tv/variety', icon: MonitorPlay },
   { label: '直播', href: '/tv/live', icon: Radio },
   { label: '私人影库', href: '/tv/private', icon: Heart },
+  { label: '我的', href: '/tv/me', icon: User },
 ];
 
 export default function TVLayout({
