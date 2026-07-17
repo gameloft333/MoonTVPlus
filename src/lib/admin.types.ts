@@ -382,6 +382,7 @@ export interface AdminConfig {
       id: string;
       title: string;
       filterText: string;
+      excludeText?: string; // 排除关键词，逗号分隔；标题包含任一则跳过
       source: 'acgrip' | 'mikan' | 'dmhy' | 'nyaa';
       enabled: boolean;
       lastCheckTime: number;
