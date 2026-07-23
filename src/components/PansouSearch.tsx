@@ -657,6 +657,7 @@ export default function PansouSearch({
       if (!api) throw new Error('暂不支持该网盘类型的直接播放');
       const response = await fetch(api, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           shareUrl: detectedShareLink.url,
