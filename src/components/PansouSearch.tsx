@@ -331,8 +331,9 @@ export default function PansouSearch({
 
   useEffect(() => {
     if (triggerSearch === undefined) return;
+    if (detectedShareLink) return;
     searchPansou();
-  }, [triggerSearch]);
+  }, [triggerSearch, detectedShareLink]);
 
   const handleCopy = async (text: string, url: string) => {
     try {
