@@ -10,7 +10,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { PansouLink, PansouSearchResult } from '@/lib/pansou.client';
 
@@ -205,7 +205,10 @@ export default function PansouSearch({
   const [toast, setToast] = useState<ToastProps | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
   const [checkStatesByType, setCheckStatesByType] = useState<Record<string, StoredCloudCheckState>>({});
-  const detectedShareLink = detectShareLink(keyword);
+  const detectedShareLink = useMemo(
+    () => (triggerSearch === undefined ? detectShareLink(keyword) : null),
+    [keyword, triggerSearch],
+  );
   const [sharePasscode, setSharePasscode] = useState('');
   const [sharePlaying, setSharePlaying] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -664,6 +667,10 @@ export default function PansouSearch({
           title: keyword,
         }),
       });
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('该网盘类型的直接播放功能暂未配置');
+      }
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || '播放失败');
       const sourceMap: Record<string, string> = {
