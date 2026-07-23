@@ -74,3 +74,10 @@ scripts/test
 
 .agents/
 skills-lock.json
+
+
+
+# others
+*.key
+# *.sh
+# *.cf

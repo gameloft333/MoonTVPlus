@@ -130,6 +130,34 @@ interface StoredCloudCheckState {
   task: NetdiskCheckTaskPayload;
 }
 
+const NETDISK_SHARE_PATTERNS: Array<{ pattern: RegExp; type: string; name: string; passcodeParam?: string }> = [
+  { pattern: /pan\.baidu\.com\/s\/([A-Za-z0-9_-]+)/, type: 'baidu', name: '百度网盘', passcodeParam: 'pwd' },
+  { pattern: /pan\.quark\.cn\/s\/([A-Za-z0-9_-]+)/, type: 'quark', name: '夸克网盘', passcodeParam: 'pwd' },
+  { pattern: /www\.aliyundrive\.com\/s\/([A-Za-z0-9_-]+)/, type: 'aliyun', name: '阿里云盘' },
+  { pattern: /www\.alipan\.com\/s\/([A-Za-z0-9_-]+)/, type: 'aliyun', name: '阿里云盘' },
+  { pattern: /yun\.139\.com\/share\/([A-Za-z0-9_-]+)/, type: 'mobile', name: '移动云盘' },
+  { pattern: /cloud\.189\.cn\/share\/([A-Za-z0-9_-]+)/, type: 'tianyi', name: '天翼云盘' },
+  { pattern: /123pan\.com\/s\/([A-Za-z0-9_-]+)/, type: '123', name: '123云盘', passcodeParam: 'pwd' },
+  { pattern: /123684\.com\/s\/([A-Za-z0-9_-]+)/, type: '123', name: '123云盘', passcodeParam: 'pwd' },
+  { pattern: /115\.com\/s\/([A-Za-z0-9_-]+)/, type: '115', name: '115网盘' },
+];
+
+function detectShareLink(input: string): { url: string; type: string; name: string; passcode: string } | null {
+  const trimmed = input.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return null;
+  for (const { pattern, type, name, passcodeParam } of NETDISK_SHARE_PATTERNS) {
+    if (pattern.test(trimmed)) {
+      let passcode = '';
+      if (passcodeParam) {
+        const m = trimmed.match(new RegExp(`${passcodeParam}=([^&]+)`));
+        if (m) passcode = m[1];
+      }
+      return { url: trimmed, type, name, passcode };
+    }
+  }
+  return null;
+}
+
 const CHECK_STATUS_STYLE: Record<CheckItemStatus, string> = {
   pending: 'bg-gray-100 text-gray-700 dark:bg-gray-700/50 dark:text-gray-200',
   checking: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200',
@@ -176,9 +204,11 @@ export default function PansouSearch({
   const [downloadTool, setDownloadTool] = useState<DownloadTool>('aria2');
   const [toast, setToast] = useState<ToastProps | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
-  const [checkStatesByType, setCheckStatesByType] = useState<
-    Record<string, StoredCloudCheckState>
-  >({});
+  const [checkStatesByType, setCheckStatesByType] = useState<Record<string, StoredCloudCheckState>>({});
+  const detectedShareLink = detectShareLink(keyword);
+  const [sharePasscode, setSharePasscode] = useState('');
+  const [sharePlaying, setSharePlaying] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     setCooldownRemainingMs(0);
@@ -300,13 +330,10 @@ export default function PansouSearch({
   }, [keyword, onError, cloudTypes]);
 
   useEffect(() => {
-    // triggerSearch 变化时触发搜索（无论是 true 还是 false）
-    if (triggerSearch === undefined) {
-      return;
-    }
-
+    if (triggerSearch === undefined) return;
+    if (detectedShareLink) return;
     searchPansou();
-  }, [triggerSearch]); // 只在触发标志变化时搜索，避免 keyword 变化自动搜索
+  }, [triggerSearch]);
 
   const handleCopy = async (text: string, url: string) => {
     try {
@@ -612,7 +639,76 @@ export default function PansouSearch({
       .map(({ link }) => link);
   };
 
+  const handleShareDirectPlay = async () => {
+    if (!detectedShareLink) return;
+    setSharePlaying(true);
+    setShareError(null);
+    try {
+      const apiMap: Record<string, string> = {
+        baidu: '/api/netdisk/baidu/instant-play',
+        quark: '/api/netdisk/quark/instant-play',
+        aliyun: '/api/netdisk/aliyun/instant-play',
+        mobile: '/api/netdisk/mobile/instant-play',
+        tianyi: '/api/netdisk/tianyi/instant-play',
+        '123': '/api/netdisk/123/instant-play',
+        '115': '/api/netdisk/115/instant-play',
+      };
+      const api = apiMap[detectedShareLink.type];
+      if (!api) throw new Error('暂不支持该网盘类型的直接播放');
+      const response = await fetch(api, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shareUrl: detectedShareLink.url,
+          passcode: sharePasscode || detectedShareLink.passcode || '',
+          title: keyword,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || '播放失败');
+      const sourceMap: Record<string, string> = {
+        baidu: 'netdisk-baidu', quark: 'netdisk-quark', aliyun: 'netdisk-aliyun',
+        mobile: 'netdisk-mobile', tianyi: 'netdisk-tianyi', '123': 'netdisk-123', '115': 'netdisk-115',
+      };
+      router.push(
+        `/play?source=${encodeURIComponent(data.source || sourceMap[detectedShareLink.type] || 'netdisk-quark')}&id=${encodeURIComponent(data.id)}&title=${encodeURIComponent(keyword)}`
+      );
+    } catch (err: any) {
+      setShareError(err?.message || '播放失败');
+    } finally {
+      setSharePlaying(false);
+    }
+  };
+
   const renderBody = () => {
+    // 网盘分享链接直接播放卡片
+    if (detectedShareLink && !loading && !results) {
+      return (
+        <div className='flex items-center justify-center py-12'>
+          <div className='text-center max-w-md w-full'>
+            <div className='mb-4 inline-flex items-center justify-center w-16 h-16 rounded-full bg-green-100 dark:bg-green-900/40'>
+              <svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' className='text-green-600 dark:text-green-400'>
+                <polygon points='5 3 19 12 5 21 5 3'></polygon>
+              </svg>
+            </div>
+            <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2'>检测到{detectedShareLink.name}分享链接</h3>
+            <p className='text-sm text-gray-500 dark:text-gray-400 mb-4 truncate'>{detectedShareLink.url}</p>
+            <div className='mb-4'>
+              <input type='text' value={sharePasscode} onChange={(e) => setSharePasscode(e.target.value)} placeholder='请输入提取码（如需要）'
+                className='w-full px-4 py-2.5 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-green-400' />
+            </div>
+            {shareError && <p className='text-sm text-red-500 dark:text-red-400 mb-4'>{shareError}</p>}
+            <button onClick={handleShareDirectPlay} disabled={sharePlaying}
+              className='inline-flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors'>
+              {sharePlaying ? (<><Loader2 className='w-4 h-4 animate-spin' />解析中...</>) : (
+                <><svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><polygon points='5 3 19 12 5 21 5 3'></polygon></svg>立即播放</>
+              )}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
     if (loading) {
       return (
         <div className='flex items-center justify-center py-12'>
