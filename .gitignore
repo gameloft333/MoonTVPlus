@@ -81,3 +81,11 @@ skills-lock.json
 *.key
 # *.sh
 # *.cf
+
+# cookie & credential files
+005_quark-cookie.txt
+006_baidu-cookie.txt
+002_issues.md
+.env.cf
+0017_toggle-proxy.bat
+001_deploy-cf.sh

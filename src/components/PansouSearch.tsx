@@ -205,10 +205,7 @@ export default function PansouSearch({
   const [toast, setToast] = useState<ToastProps | null>(null);
   const [cooldownRemainingMs, setCooldownRemainingMs] = useState(0);
   const [checkStatesByType, setCheckStatesByType] = useState<Record<string, StoredCloudCheckState>>({});
-  const detectedShareLink = useMemo(
-    () => (triggerSearch === undefined ? detectShareLink(keyword) : null),
-    [keyword, triggerSearch],
-  );
+  const detectedShareLink = useMemo(() => detectShareLink(keyword), [keyword]);
   const [sharePasscode, setSharePasscode] = useState('');
   const [sharePlaying, setSharePlaying] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
@@ -334,7 +331,6 @@ export default function PansouSearch({
 
   useEffect(() => {
     if (triggerSearch === undefined) return;
-    if (detectedShareLink) return;
     searchPansou();
   }, [triggerSearch]);
 
